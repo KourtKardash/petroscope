@@ -9,8 +9,10 @@ using reference images of a mirror or an OLED screen.
 from pathlib import Path
 from typing import Iterable
 
+import cv2
 import numpy as np
 from PIL import Image, ImageFilter
+from scipy.optimize import curve_fit
 from tqdm import tqdm
 
 from petroscope.utils import logger
@@ -80,10 +82,69 @@ class ImageCalibrator:
     def _illumination_screen(
         self, ref_img_path: Path | None
     ) -> np.ndarray | None:
-        """Placeholder for screen calibration preparation."""
         if ref_img_path is None:
             return None
-        raise NotImplementedError
+        img = Image.open(ref_img_path)
+        img = np.array(img)
+        red_channel = img[:, :, 0]
+        green_channel = img[:, :, 1]
+        blue_channel = img[:, :, 2]
+        height, width = red_channel.shape
+
+        x_min = int(width * 0.4)
+        x_max = int(width * 0.6)
+        y_min = int(height * 0.4)
+        y_max = int(height * 0.6)
+
+        min_red = np.min(red_channel[x_min:x_max, y_min:y_max])
+        min_green = np.min(green_channel[x_min:x_max, y_min:y_max])
+        min_blue = np.min(blue_channel[x_min:x_max, y_min:y_max])
+
+        min_intens_arr = [min_red, min_green, min_blue]
+        min_intens_index = np.argmin(min_intens_arr)
+        chosen_channel = None
+        add_channel_1 = None
+        add_channel_2 = None
+
+        if min_intens_index == 0:
+            chosen_channel = red_channel
+            add_channel_1 = green_channel
+            add_channel_2 = blue_channel
+        elif min_intens_index == 1:
+            chosen_channel = green_channel
+            add_channel_1 = red_channel
+            add_channel_2 = blue_channel
+        else:
+            chosen_channel = blue_channel
+            add_channel_1 = red_channel
+            add_channel_2 = green_channel
+
+        centroids, intensities = self._get_centroids(chosen_channel,
+                                                     add_channel_1,
+                                                     add_channel_2)
+        x_data = centroids[:, 0]
+        y_data = centroids[:, 1]
+
+        initial_guess = (1, np.mean(x_data), np.mean(y_data), 1000, 1000)
+
+        popt, _ = curve_fit(self.gaussian_2d,
+                            (x_data, y_data),
+                            intensities,
+                            p0=initial_guess,
+                            maxfev=10000)
+
+        A_opt, x0_opt, y0_opt, sigma_x_opt, sigma_y_opt = popt
+
+        height, width = img.shape[:2]
+        x = np.linspace(0, width - 1, width)
+        y = np.linspace(0, height - 1, height)
+        X, Y = np.meshgrid(x, y)
+
+        Z = self.gaussian_2d((X, Y), A_opt, x0_opt, y0_opt,
+                             sigma_x_opt, sigma_y_opt)
+
+        illumination_mask = Z + (1 - np.max(Z))
+        return illumination_mask
 
     def _distortion_screen(self, ref_img_path: Path) -> np.ndarray:
         """Placeholder for screen distortion calibration."""
@@ -104,6 +165,85 @@ class ImageCalibrator:
                 map_1ch = screen_map
         map_3ch = np.repeat(map_1ch[:, :, np.newaxis], 3, axis=2)
         return map_3ch
+
+    def gaussian_2d(
+        self,
+        coords: tuple[np.ndarray, np.ndarray],
+        A: float,
+        x0: float,
+        y0: float,
+        sigma_x: float,
+        sigma_y: float
+    ) -> np.ndarray:
+        X, Y = coords
+        norm_x = (X - x0) ** 2 / (2 * sigma_x ** 2)
+        norm_y = (Y - y0) ** 2 / (2 * sigma_y ** 2)
+        return A * np.exp(-(norm_x + norm_y))
+
+    def _get_binary_image(
+        self,
+        chosen_channel: np.ndarray,
+        add_channel_1: np.ndarray,
+        add_channel_2: np.ndarray,
+        window_size: int = 128
+    ) -> np.ndarray:
+        proc_image = np.zeros_like(chosen_channel, dtype=np.uint8)
+        height, width = chosen_channel.shape
+        for y in range(0, height, window_size):
+            for x in range(0, width, window_size):
+                window = chosen_channel[y:y+window_size, x:x+window_size]
+                add_window_1 = add_channel_1[y:y+window_size, x:x+window_size]
+                add_window_2 = add_channel_2[y:y+window_size, x:x+window_size]
+
+                threshold = np.mean(window) + np.std(window)
+                threshold_1 = np.mean(add_window_1) + 2*np.std(add_window_1)
+                threshold_2 = np.mean(add_window_2) + 2*np.std(add_window_2)
+
+                binary_wnd = ((window > threshold) &
+                              (add_window_1 < threshold_1) &
+                              (add_window_2 < threshold_2))
+                proc_image[y:y+window_size, x:x+window_size][binary_wnd] = 255
+        return proc_image
+ 
+    def _get_centroids(
+        self,
+        chosen_channel: np.ndarray,
+        add_channel_1: np.ndarray,
+        add_channel_2: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        thresh = self._get_binary_image(chosen_channel,
+                                        add_channel_1,
+                                        add_channel_2)
+        image = cv2.medianBlur(thresh, 9)
+
+        contours, _ = cv2.findContours(image,
+                                       cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
+
+        areas = np.array([cv2.contourArea(contour) for contour in contours])
+        mean_number = np.mean(areas) - 1.5 * np.std(areas)
+        filtered_contours = [contour for contour, area in zip(contours, areas)
+                             if area >= mean_number]
+
+        centroids = []
+        intensities = []
+
+        for contour in filtered_contours:
+            M = cv2.moments(contour)
+            if M['m00'] != 0:
+                cX = int(M['m10'] / M['m00'])
+                cY = int(M['m01'] / M['m00'])
+                centroids.append((cX, cY))
+
+                mask = np.zeros_like(image)
+                cv2.drawContours(mask, [contour], -1, color=255, thickness=-1)
+                mean_intensity = cv2.mean(chosen_channel / 255, mask=mask)[0]
+                intensities.append(mean_intensity)
+
+        centroids = np.array(centroids)
+        intensities = np.array(intensities)
+
+        return centroids, intensities
 
     def calibrate(
         self, img_path: Path, out_path: Path, quiet: bool = False
