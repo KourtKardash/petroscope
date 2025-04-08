@@ -1,6 +1,6 @@
 [project]
 name = "petroscope"
-version = "0.0.6"
+version = "0.0.11"
 authors = [
   { name="Alexander Khvostikov", email="khvostikov@cs.msu.ru" },
 ]
@@ -15,23 +15,31 @@ classifiers = [
 ]
 dependencies = [
     "pyyaml",
-    "numpy>=1.16, <2.0.0",
+    "numpy>=2.0.0",
     "pillow",
     "matplotlib",
     "tqdm",
     "scipy",
+    "scikit-image",
     "loguru",
-    "prettytable"
+    "prettytable",
+    "requests",
 ]
 
-[tool.setuptools]
-packages = ["petroscope"]
+
+[tool.setuptools.packages.find]
+include = ["petroscope", "petroscope.*"]
+
+[tool.setuptools.package-data]
+"petroscope" = ["segmentation/*.yaml"]
 
 [project.optional-dependencies]
 extra = [
     "torch",
+    "torchvision",
     "kornia",
-    "opencv-python"
+    "opencv-python",
+    "hydra-core",
 ]
 
 [project.urls]

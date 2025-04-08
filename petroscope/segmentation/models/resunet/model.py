@@ -6,9 +6,9 @@ import numpy as np
 import requests
 from tqdm import tqdm
 
-from petroscope.segmentation.eval import SegmDetailedTester
-from petroscope.segmentation.model import GeoSegmModel
-from petroscope.segmentation.utils.data import ClassSet
+from petroscope.segmentation import GeoSegmModel
+from petroscope.segmentation.classes import ClassSet
+from petroscope.segmentation import SegmDetailedTester
 
 # import torch-sensitive modules (satisfies Pylance and Flake8)
 if TYPE_CHECKING:
@@ -17,24 +17,25 @@ if TYPE_CHECKING:
     import torch.optim as optim
 
 from petroscope.utils import logger
-from petroscope.utils.lazy_imports import torch, nn, optim  # noqa
+from petroscope.utils.lazy_imports import nn, optim, torch  # noqa
 
 
 class ResUNetTorch(GeoSegmModel):
 
     MODEL_REGISTRY = {
         "s1_x05": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05.pth",
-        "s1_x05_e5": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_e5.pth",
-        "s1_x05_e10": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_e10.pth",
         "s1_x05_calib": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_calib.pth",
-        "s1_x05_calib_e5": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_calib_e5.pth",
-        "s1_x05_calib_e10": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_calib_e10.pth",
         "s2_x05": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05.pth",
-        "s2_x05_e5": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_e5.pth",
-        "s2_x05_e10": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_e10.pth",
         "s2_x05_calib": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_calib.pth",
-        "s2_x05_calib_e5": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_calib_e5.pth",
-        "s2_x05_calib_e10": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_calib_e10.pth",
+        # extra weights
+        "__s1_x05_e5": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_e5.pth",
+        "__s1_x05_e10": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_e10.pth",
+        "__s1_x05_calib_e5": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_calib_e5.pth",
+        "__s1_x05_calib_e10": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s1_x05_calib_e10.pth",
+        "__s2_x05_e5": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_e5.pth",
+        "__s2_x05_e10": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_e10.pth",
+        "__s2_x05_calib_e5": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_calib_e5.pth",
+        "__s2_x05_calib_e10": "http://www.xubiker.online/petroscope/segmentation_weights/resunet_s2_x05_calib_e10.pth",
     }
 
     CACHE_DIR = Path.home() / ".petroscope" / "models"
@@ -86,7 +87,9 @@ class ResUNetTorch(GeoSegmModel):
         logger.success(f"Download complete: {save_path}")
 
     @classmethod
-    def trained(cls, weights_name: str, device: str) -> "ResUNetTorch":
+    def trained(
+        cls, weights_name: str, device: str, force_download: bool = False
+    ) -> "ResUNetTorch":
         """Load a trained model from the registry, restoring hyperparameters automatically."""
         if weights_name not in cls.MODEL_REGISTRY:
             raise ValueError(
@@ -100,7 +103,7 @@ class ResUNetTorch(GeoSegmModel):
         weights_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Download if not available
-        if not weights_path.exists():
+        if not weights_path.exists() or force_download:
             logger.info(f"Downloading weights for {weights_name}...")
             cls.download_weights(weights_url, weights_path)
 
@@ -262,7 +265,7 @@ class ResUNetTorch(GeoSegmModel):
         conv_pad: int,
         patch_overlay: int | float,
     ) -> np.ndarray:
-        from petroscope.segmentation.utils.data import (
+        from petroscope.segmentation.utils.utils import (
             combine_from_patches,
             split_into_patches,
         )
@@ -382,7 +385,7 @@ class ResUNetTorch(GeoSegmModel):
 
     @property
     def n_params_str(self):
-        from petroscope.segmentation.utils.base import UnitsFormatter
+        from petroscope.utils.base import UnitsFormatter
 
         n = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         return f"Size of model: {UnitsFormatter.si(n)}"

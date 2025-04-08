@@ -1,8 +1,10 @@
 import argparse
 from pathlib import Path
 
-import petroscope.segmentation as segm
-from petroscope.segmentation.utils.base import prepare_experiment
+import petroscope.segmentation.models as models
+from petroscope.segmentation.classes import LumenStoneClasses
+from petroscope.segmentation import SegmDetailedTester
+from petroscope.utils.base import prepare_experiment
 
 
 def get_test_img_mask_pairs(ds_dir: Path):
@@ -30,12 +32,14 @@ def run_test(
     Runs model on test images from dataset directory and
     saves results to output directory.
     """
-    classes = segm.LumenStoneClasses.from_name(classes_name)
+    classes = LumenStoneClasses.from_name(classes_name)
     # create the model (PSPNetTorch or ResUnetTorch) and load weights
-    model = segm.models.PSPNetTorch.trained("s2_resnet18_x05_calib", device)
-    # model = segm.models.ResUNetTorch.trained("s2_x05_calib", device)
+    # model = models.ResUNetTorch.trained("s1_x05", device)
+    model = models.PSPNetTorch.trained(
+        "s1_resnet18_x05", device, force_reload=True
+    )
 
-    tester = segm.SegmDetailedTester(
+    tester = SegmDetailedTester(
         out_dir=out_dir,
         classes=classes,
         void_pad=void_pad,
@@ -63,8 +67,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     run_test(
-        classes_name="S2v1",
-        ds_dir=Path("/mnt/c/dev/LumenStone/S2_v1_x05"),
+        classes_name="S1v1",
+        ds_dir=Path("/mnt/c/dev/LumenStone/S1_v2_x05"),
         out_dir=prepare_experiment(Path("./out")),
         device=args.device,
     )
