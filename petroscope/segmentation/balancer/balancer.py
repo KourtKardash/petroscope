@@ -5,7 +5,7 @@ from typing import Iterable, Iterator
 
 import cv2
 import numpy as np
-from scipy.ndimage import uniform_filter
+from scipy.ndimage import uniform_filter, binary_erosion
 from tqdm import tqdm
 
 from petroscope.segmentation.augment import PrimaryAugmentor
@@ -75,6 +75,7 @@ class _DsItem:
         self,
         img_path: Path,
         mask_path: Path,
+        valid_zone: np.ndarray | None,
         mask_classes_mapping: dict[int, int] | None,
         void_border_width: int | None,
         patch_size: int,
@@ -470,6 +471,9 @@ class ClassBalancedPatchDataset:
         print_class_distribution: bool = False,
         store_history: bool = False,
         seed: int | None = None,
+        add_img_dir_path: Path = Path("data/imgs_loftr"),
+        n_rotated: int = 3,
+        step_polazied: int 60,
     ) -> None:
         """
         The ClassBalancedPatchDataset class is designed to extract patches from
@@ -564,7 +568,6 @@ class ClassBalancedPatchDataset:
 
             seed (int | None): Random seed for reproducibility. If None,
             a random seed is used.
-
         """
 
         # perform assertions
@@ -587,6 +590,11 @@ class ClassBalancedPatchDataset:
         self.patch_pos_acc = patch_positioning_accuracy
         self.print_class_distribution = print_class_distribution
         self.store_history = store_history
+
+        self.add_img_dir_path = add_img_dir_path
+        self.add_img_paths = sorted(list(add_img_dir_path.iterdir()))
+        self.n_rotated = n_rotated
+        self.step_polazied = step_polazied
 
         self.seed = seed
         self.random_state = (
@@ -643,25 +651,54 @@ class ClassBalancedPatchDataset:
             f"approx len (num of patches): {len(self)}"
         )
 
+    @staticmethod
+    def _find_common_region(images):
+        first_image = images[0]
+        height, width = first_image.shape[:2]
+        common_mask = np.ones((height, width), dtype=np.uint8)
+
+        for im in images:
+            mask = np.any(im > 0, axis=2).astype(np.uint8)
+            common_mask = (common_mask > 0) & (mask > 0)
+            common_mask = common_mask.astype(np.uint8)
+        return common_mask
+
     def _initialize(self) -> None:
+        # load additional images
+        self.add_imgs = []
+        self.valid_zones = []
+        print('loading additional images with polarized minerals and calculating valid zones')
+        for add_path in tqdm(self.add_img_paths):
+            files = sorted(add_path.iterdir(), key=lambda y: int(y.stem))
+            selectedFiles = files[::self.step_polazied // 15][:self.n_rotated]
+            temp_arr = []
+            for p in selectedFiles:
+                img = cv2.imread(p)
+                h, w = img.shape[:2]
+                new_w = int(w * factor)
+                new_h = int(h * factor)
+                img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                temp_arr.append(img)
+
+            self.add_imgs.append(temp_arr)
+            common_mask = self._find_common_region(temp_arr)
+            kernel = np.ones((7, 7), dtype=bool)
+            eroded = binary_erosion(common_mask, structure=kernel, iterations=1)
+            self.valid_zones.append(eroded.astype(np.uint8))
+        self.add_imgs.append([np.zeros_like(self.add_imgs[0][0]) for _ in range (self.n_rotated)])
+
         # create items
-        self.items = [
-            _DsItem(
-                img_p,
-                mask_p,
-                self.mask_classes_mapping,
-                self.void_border_width,
-                patch_size=self.patch_size_src,
-                seed=(
-                    self.seed + _short_hash("item") + i
-                    if self.seed is not None
-                    else None
-                ),
-            )
-            for i, (img_p, mask_p) in enumerate(
-                tqdm(self.img_mask_paths, "loading images")
-            )
-        ]
+        self.items = []
+        for i, (img_p, mask_p) in enumerate(tqdm(self.img_mask_paths, "loading images")):
+            valid_zone_to_pass = None if i < 70 else self.valid_zones[i - 70]
+            self.items.append(_DsItem(img_p, mask_p, valid_zone_to_pass, 
+                                    self.void_border_width,
+                                    patch_size=self.patch_size_src,
+                                    seed=(
+                                        self.seed + _short_hash("item") + i
+                                        if self.seed is not None
+                                        else None
+                                    )))
 
         # get all mask values
         mask_vals = set.union(*[set(i.n_pixels.keys()) for i in self.items])
