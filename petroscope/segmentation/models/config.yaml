@@ -1,6 +1,6 @@
 hydra:
   job:
-    chdir: True
+    chdir: False
 
 model_type: "hrnet"
 
@@ -105,9 +105,9 @@ train:
 
 # Data settings
 data:
-  classes: "S1_S2"
-  cache_path: "${oc.env:HOME}/.cache/petroscope-data"
-  dataset_path: "${oc.env:HOME}/dev/LumenStone/S1v2_S2v2_x05/"
+  classes: "S3"
+  cache_path: "data/Cache"
+  dataset_path: "data/S1_v1_and_S3_v3_small"
 
 # Test settings
 test:
