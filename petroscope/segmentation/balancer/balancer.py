@@ -86,6 +86,8 @@ class _DsItem:
         self.mask_classes_mapping = mask_classes_mapping
         self.void_border_width = void_border_width
         self.patch_size = patch_size
+        self.valid_zone = valid_zone
+
         # Create a RandomState instance once during initialization
         self.seed = seed
         self._random_state = (
@@ -116,8 +118,12 @@ class _DsItem:
 
         self.height, self.width = self.image.shape[:2]
 
-        values, counts = np.unique(self.mask, return_counts=True)
-        self.n_pixels = {v: c for v, c in zip(values, counts)}
+        result_mask = self.mask.copy()
+        if self.valid_zone is not None:
+            result_mask[self.valid_zone == 0] = 100
+
+        values, counts = np.unique(result_mask, return_counts=True)
+        self.n_pixels = {v: c for v, c in zip(values, counts) if v != 100}
 
     def load_prob_maps(
         self,
@@ -198,7 +204,11 @@ class _DsItem:
         self.height_s = self.height // downscale
         self.width_s = self.width // downscale
 
-        mask_cls = np.where(mask == cls_val, 1, 0).astype(np.float32)
+        result_mask = mask.copy()
+        if self.valid_zone is not None:
+            result_mask[self.valid_zone == 0] = 100
+
+        mask_cls = np.where(result_mask == cls_val, 1, 0).astype(np.float32)
 
         # if no pixels of this class in the image no need to build a map
         n_pixels = np.sum(mask_cls)
@@ -210,6 +220,9 @@ class _DsItem:
         p = uniform_filter(
             mask_cls, patch_size, mode="constant", cval=0.0, origin=-origin
         )
+
+        if self.valid_zone is not None:
+            p = p * self.valid_zone
 
         # downscale the prob map
         if downscale > 1:
