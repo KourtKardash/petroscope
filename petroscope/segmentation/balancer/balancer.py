@@ -486,7 +486,7 @@ class ClassBalancedPatchDataset:
         seed: int | None = None,
         add_img_dir_path: Path = Path("data/imgs_loftr"),
         n_rotated: int = 3,
-        step_polazied: int 60,
+        step_polazied: int = 60,
     ) -> None:
         """
         The ClassBalancedPatchDataset class is designed to extract patches from
@@ -688,8 +688,8 @@ class ClassBalancedPatchDataset:
             for p in selectedFiles:
                 img = cv2.imread(p)
                 h, w = img.shape[:2]
-                new_w = int(w * factor)
-                new_h = int(h * factor)
+                new_w = int(w * 0.5)
+                new_h = int(h * 0.5)
                 img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
                 temp_arr.append(img)
 
