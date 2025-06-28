@@ -2,8 +2,11 @@ from pathlib import Path
 from typing import Literal
 import warnings
 
+import argparse
+from dataclasses import dataclass
 import hydra
 from omegaconf import DictConfig
+import sys
 
 from petroscope.segmentation.balancer import ClassBalancedPatchDataset
 from petroscope.segmentation.classes import LumenStoneClasses
@@ -13,6 +16,14 @@ from petroscope.segmentation.models.pspnet.model import PSPNet
 from petroscope.segmentation.models.hrnet import HRNet
 from petroscope.segmentation.utils import BasicBatchCollector
 from petroscope.utils import logger
+
+
+@dataclass
+class AnisotropicParams:
+    anisotropic_mode: bool = False
+    add_img_dir_path: str = None
+    n_rotated: int = None
+    step_polazied: int = None
 
 
 def set_pytorch_seed(seed: int):
@@ -56,7 +67,7 @@ def test_img_mask_pairs(cfg: DictConfig):
     return test_img_mask_p
 
 
-def create_train_dataset(cfg: DictConfig):
+def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams):
     """Create a training dataset.
 
     Args:
@@ -86,9 +97,10 @@ def create_train_dataset(cfg: DictConfig):
         cache_dir=Path(cfg.data.cache_path),
         void_border_width=cfg.train.balancer.void_border_width,
         seed=cfg.hardware.seed,
-        add_img_dir_path=Path("data/imgs_loftr"),
-        n_rotated=3,
-        step_polazied=60
+        add_img_dir_path=Path(anisotropic_params.add_img_dir_path),
+        n_rotated=anisotropic_params.n_rotated,
+        step_polazied=anisotropic_params.step_polazied,
+        mode=anisotropic_params.anisotropic_mode
     )
 
 
@@ -184,6 +196,7 @@ def create_model(
     model_type: Literal["resunet", "pspnet", "hrnet"],
     cfg: DictConfig,
     n_classes: int,
+    n_rotated: int
 ) -> PatchSegmentationModel:
     """
     Create a segmentation model based on the specified type.
@@ -205,6 +218,7 @@ def create_model(
             backbone=cfg.model.resunet.get("backbone", None),
             dilated=cfg.model.resunet.get("dilated", False),
             pretrained=cfg.model.resunet.get("pretrained", True),
+            n_rotated=3
         )
     elif model_type == "pspnet":
         return PSPNet(
@@ -212,6 +226,7 @@ def create_model(
             backbone=cfg.model.pspnet.backbone,
             dilated=cfg.model.pspnet.dilated,
             device=cfg.hardware.device,
+            n_rotated=3
         )
     elif model_type == "hrnet":
         return HRNet(
@@ -222,6 +237,7 @@ def create_model(
             ocr_mid_channels=cfg.model.hrnet.ocr_mid_channels,
             dropout=cfg.model.hrnet.dropout,
             use_aux_head=cfg.model.hrnet.use_aux_head,
+            n_rotated=3
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
@@ -257,7 +273,7 @@ def create_loss_manager(cfg: DictConfig, dataset, device: str):
 
 
 @hydra.main(version_base="1.2", config_path=".", config_name="config.yaml")
-def run_training(cfg: DictConfig):
+def run_training(anisotropic_params: AnisotropicParams, cfg: DictConfig):
     """
     Main training function.
 
@@ -275,13 +291,13 @@ def run_training(cfg: DictConfig):
     classes = LumenStoneClasses.from_name(cfg.data.classes)
 
     # Create the training dataset
-    train_ds = create_train_dataset(cfg)
+    train_ds = create_train_dataset(cfg, anisotropic_params)
 
     # Create data samplers using the dataset
     train_iterator, val_iterator, ds_len = create_samplers(train_ds, cfg)
 
     # Create model
-    model = create_model(model_type, cfg, len(classes))
+    model = create_model(model_type, cfg, len(classes), anisotropic_params.n_rotated)
 
     logger.info(f"Training {model_type.upper()} model")
     logger.info(model.n_params_str)
@@ -322,5 +338,29 @@ def run_training(cfg: DictConfig):
     )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--anisotropic', action='store_true', help='Enable anisotropic mode')
+    args, remaining = parser.parse_known_args()
+
+    if args.anisotropic:
+        if len(remaining) != 3:
+            print("Error: --anisotropic requires exactly 3 arguments: add_img_dir_path, n_rotated, step_polazied")
+            sys.exit(1)
+
+        add_img_dir_path = remaining[0]
+        n_rotated = int(remaining[1])
+        step_polazied = int(remaining[2])
+
+        params = AnisotropicParams(True, add_img_dir_path, n_rotated, step_polazied)
+    else:
+        if remaining:
+            print("Error: unexpected arguments provided without --anisotropic flag.")
+            sys.exit(1)
+        params = AnisotropicParams()
+
+    return params
+
 if __name__ == "__main__":
-    run_training()
+    anisotropic_params = parse_args()
+    run_training(anisotropic_params)
