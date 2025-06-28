@@ -52,7 +52,7 @@ class PatchSegmentationModel(GeoSegmModel):
         vis_segmentation: bool
         max_epoch_visualizations: int  # Keep last N epoch visualizations
 
-    def __init__(self, n_classes: int, device: str) -> None:
+    def __init__(self, n_classes: int, device: str, n_rotated: int) -> None:
         """
         Initialize the patch segmentation model.
 
@@ -65,6 +65,7 @@ class PatchSegmentationModel(GeoSegmModel):
         self.n_classes = n_classes
         self.model = None  # To be set by subclasses
         self.tester: SegmDetailedTester | None = None
+        self.n_rotated = n_rotated
 
     @classmethod
     def from_pretrained(
@@ -387,7 +388,7 @@ class PatchSegmentationModel(GeoSegmModel):
             if self.tester is not None and epoch % test_every == 0:
                 self.model.eval()
                 metrics_full, metrics_void = self.tester.test_on_set(
-                    test_params.img_mask_paths, self.predict_image, epoch=epoch
+                    test_params.img_mask_paths, self.predict_image, epoch=epoch, n_add_imgs=self.n_rotated
                 )
 
                 # Clean up old epoch visualization directories

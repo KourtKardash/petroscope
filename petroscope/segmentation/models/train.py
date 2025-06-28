@@ -86,6 +86,9 @@ def create_train_dataset(cfg: DictConfig):
         cache_dir=Path(cfg.data.cache_path),
         void_border_width=cfg.train.balancer.void_border_width,
         seed=cfg.hardware.seed,
+        add_img_dir_path=Path("data/imgs_loftr"),
+        n_rotated=3,
+        step_polazied=60
     )
 
 

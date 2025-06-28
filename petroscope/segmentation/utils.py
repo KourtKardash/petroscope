@@ -138,6 +138,10 @@ def load_image(path: Path, normalize=False, to_float=False) -> np.ndarray:
 
     # copy needed to avoid side effects while transferring arrays to pytorch
     img = cv2.imread(str(path))[:, :, ::-1].copy()  # BGR to RGB
+    h, w = img.shape[:2]
+    new_w = int(w * 0.5)
+    new_h = int(h * 0.5)
+    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
     if normalize:
         return img.astype(np.float32) / 255
     if to_float:

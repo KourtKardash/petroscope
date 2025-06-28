@@ -2,7 +2,7 @@ hydra:
   job:
     chdir: False
 
-model_type: "hrnet"
+model_type: "resunet"
 
 # Model-specific settings
 model:
@@ -105,9 +105,9 @@ train:
 
 # Data settings
 data:
-  classes: "S3"
+  classes: "S1_S2_S3"
   cache_path: "data/Cache"
-  dataset_path: "data/S1_v1_and_S3_v3_small"
+  dataset_path: "data/S1_v2_S2_v2_S3_v1"
 
 # Test settings
 test:

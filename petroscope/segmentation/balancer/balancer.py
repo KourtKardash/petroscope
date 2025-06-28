@@ -246,13 +246,14 @@ class _DsItem:
         return p
 
     def patch_random(
-        self, size: int = None
+        self, add_imgs: np.ndarray, size: int = None
     ) -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
+        result_imgs = np.concatenate((self.image, *add_imgs), axis=2)
         s = self.patch_size_s if size is None else size
         y = self._random_state.randint(low=0, high=self.height - s)
         x = self._random_state.randint(low=0, high=self.width - s)
         # extract image patch and mask patch
-        patch_img = self.image[y : y + s, x : x + s, :]
+        patch_img = result_imgs[y : y + s, x : x + s, :]
         patch_mask = self.mask[y : y + s, x : x + s]
         return patch_img, patch_mask, (y, x)
 
@@ -267,9 +268,9 @@ class _DsItem:
         return self._random_states_cls[cls_idx]
 
     def balanced_patch_sampler(
-        self, class_idx
+        self, class_idx, add_imgs: np.ndarray
     ) -> Iterator[tuple[np.ndarray, np.ndarray, tuple[int, int]]]:
-
+        result_imgs = np.concatenate((self.image, *add_imgs), axis=2)
         random_state = self._random_state_for_cls(class_idx)
 
         p = self.p_maps[class_idx]
@@ -294,7 +295,7 @@ class _DsItem:
             x = min(self.width - self.patch_size, x)
 
             # extract image patch and mask patch
-            patch_img = self.image[
+            patch_img = result_imgs[
                 y : y + self.patch_size,
                 x : x + self.patch_size,
                 :,
@@ -686,7 +687,7 @@ class ClassBalancedPatchDataset:
             selectedFiles = files[::self.step_polazied // 15][:self.n_rotated]
             temp_arr = []
             for p in selectedFiles:
-                img = cv2.imread(p)
+                img = cv2.imread(p)[:, :, ::-1].copy()
                 h, w = img.shape[:2]
                 new_w = int(w * 0.5)
                 new_h = int(h * 0.5)
@@ -695,7 +696,7 @@ class ClassBalancedPatchDataset:
 
             self.add_imgs.append(temp_arr)
             common_mask = self._find_common_region(temp_arr)
-            kernel = np.ones((7, 7), dtype=bool)
+            kernel = np.ones((9, 9), dtype=bool)
             eroded = binary_erosion(common_mask, structure=kernel, iterations=1)
             self.valid_zones.append(eroded.astype(np.uint8))
         self.add_imgs.append([np.zeros_like(self.add_imgs[0][0]) for _ in range (self.n_rotated)])
@@ -703,7 +704,7 @@ class ClassBalancedPatchDataset:
         # create items
         self.items = []
         for i, (img_p, mask_p) in enumerate(tqdm(self.img_mask_paths, "loading images")):
-            valid_zone_to_pass = None if i < 70 else self.valid_zones[i - 70]
+            valid_zone_to_pass = None if i < 112 else self.valid_zones[i - 112]
             self.items.append(_DsItem(img_p, mask_p, valid_zone_to_pass, 
                                     self.void_border_width,
                                     patch_size=self.patch_size_src,
@@ -826,8 +827,12 @@ class ClassBalancedPatchDataset:
         item_idx = self.random_state_balanced.choice(
             self._cls_items_idx[cls_idx], p=self._cls_weights[cls_idx]
         )
+
         img, mask, pos = next(
-            self.items[item_idx].balanced_patch_sampler(cls_idx)
+            self.items[item_idx].balanced_patch_sampler(cls_idx,
+                                                        add_imgs=self.add_imgs[item_idx - 112]
+                                                        if item_idx >= 112 
+                                                        else self.add_imgs[-1])
         )
         return img, mask, item_idx, pos
 
@@ -840,7 +845,7 @@ class ClassBalancedPatchDataset:
         """
         item_idx = self.random_state.choice(len(self.items))
         img, mask, pos = self.items[item_idx].patch_random(
-            self.augmentor.patch_size_src
+            self.add_imgs[-1], self.augmentor.patch_size_src
         )
         img, mask = self.augmentor.augment(img, mask)
         if update_accum:
