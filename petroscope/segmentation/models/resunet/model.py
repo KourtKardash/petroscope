@@ -31,6 +31,7 @@ class ResUNet(PatchSegmentationModel):
         backbone: str = None,
         dilated: bool = False,
         pretrained: bool = True,
+        n_rotated: int | None = None
     ) -> None:
         """
         Initialize the ResUNet model.
@@ -44,7 +45,7 @@ class ResUNet(PatchSegmentationModel):
             dilated: Whether to use dilated convolutions
             pretrained: Whether to use pretrained backbone weights
         """
-        super().__init__(n_classes, device)
+        super().__init__(n_classes, device, n_rotated)
 
         from petroscope.segmentation.models.resunet.nn import ResUNet
 
@@ -53,7 +54,7 @@ class ResUNet(PatchSegmentationModel):
         self.backbone = backbone
         self.dilated = dilated
         self.pretrained = pretrained
-
+        self.n_rotated = n_rotated
         self.model = ResUNet(
             n_classes=n_classes,
             n_layers=layers,
@@ -61,6 +62,7 @@ class ResUNet(PatchSegmentationModel):
             backbone=backbone,
             dilated=dilated,
             pretrained=pretrained,
+            n_rotated=self.n_rotated
         ).to(self.device)
 
     def _get_checkpoint_data(self) -> dict[str, Any]:

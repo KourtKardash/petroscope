@@ -241,6 +241,7 @@ class ResUNet(nn.Module):
         backbone: Optional[str] = None,
         dilated: bool = False,
         pretrained: bool = True,
+        n_rotated: int | None = None
     ):
         super(ResUNet, self).__init__()
         self.n_classes = n_classes
@@ -249,6 +250,7 @@ class ResUNet(nn.Module):
         self.backbone_name = backbone
         self.dilated = dilated
         self.pretrained = pretrained
+        self.n_rotated = n_rotated
 
         if backbone is None:
             # If no backbone is specified, use the original ResUNet implementation
@@ -309,6 +311,24 @@ class ResUNet(nn.Module):
         """Build and configure the backbone network."""
         # Create model with pretrained weights if requested
         model = config["model_fn"](pretrained)
+        if self.n_rotated is not None:
+            old_conv1 = model.conv1
+            new_conv1 = nn.Conv2d(
+                (self.n_rotated + 1) * 3,
+                old_conv1.out_channels,
+                kernel_size=old_conv1.kernel_size,
+                stride=old_conv1.stride,
+                padding=old_conv1.padding,
+                bias=old_conv1.bias is not None
+            )
+            
+            new_weights = torch.cat([old_conv1.weight.data] * (self.n_rotated + 1), dim=1) / (self.n_rotated + 1)
+            new_conv1.weight.data = new_weights
+            
+            if old_conv1.bias is not None:
+                new_conv1.bias.data = old_conv1.bias.data
+            
+            model.conv1 = new_conv1
 
         # Extract features based on backbone type
         if backbone_name.startswith("resnet"):
