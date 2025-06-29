@@ -713,7 +713,7 @@ class ClassBalancedPatchDataset:
         # create items
         self.items = []
         for i, (img_p, mask_p) in enumerate(tqdm(self.img_mask_paths, "loading images")):
-            valid_zone_to_pass = None if i < 112 or not self.mood else self.valid_zones[i - 112]
+            valid_zone_to_pass = None if i < 113 or not self.mood else self.valid_zones[i - 113]
             self.items.append(_DsItem(img_p, mask_p, valid_zone_to_pass, 
                                     self.void_border_width,
                                     patch_size=self.patch_size_src,
@@ -836,7 +836,7 @@ class ClassBalancedPatchDataset:
         item_idx = self.random_state_balanced.choice(
             self._cls_items_idx[cls_idx], p=self._cls_weights[cls_idx]
         )
-        add_imgs = (self.add_imgs[item_idx - 112] if item_idx >= 112 else self.add_imgs[-1]) if self.mode else None
+        add_imgs = (self.add_imgs[item_idx - 113] if item_idx >= 113 else self.add_imgs[-1]) if self.mode else None
         img, mask, pos = next(
             self.items[item_idx].balanced_patch_sampler(cls_idx,
                                                         add_imgs=add_imgs)
