@@ -64,12 +64,14 @@ class PSPNet(nn.Module):
         dilated=True,
         pretrained=True,
         weights=None,
+        n_rotated: int | None = None
     ):
         super().__init__()
 
         self.n_classes = n_classes
         self.dilated = dilated
         self.backbone = backbone
+        self.n_rotated = n_rotated
 
         # Load ResNet backbone
         if weights is None and pretrained:
@@ -88,6 +90,25 @@ class PSPNet(nn.Module):
             weights = None
 
         resnet = getattr(models, backbone)(weights=weights)
+        if self.n_rotated is not None:
+            old_conv1 = resnet.conv1
+            new_conv1 = nn.Conv2d(
+                (self.n_rotated + 1) * 3,
+                old_conv1.out_channels,
+                kernel_size=old_conv1.kernel_size,
+                stride=old_conv1.stride,
+                padding=old_conv1.padding,
+                bias=old_conv1.bias is not None
+            )
+            
+            new_weights = torch.cat([old_conv1.weight.data] * (self.n_rotated + 1), dim=1) / (self.n_rotated + 1)
+            new_conv1.weight.data = new_weights
+            
+            if old_conv1.bias is not None:
+                new_conv1.bias.data = old_conv1.bias.data
+            
+            resnet.conv1 = new_conv1
+            
         self.layer0 = nn.Sequential(
             resnet.conv1, resnet.bn1, resnet.relu, resnet.maxpool
         )

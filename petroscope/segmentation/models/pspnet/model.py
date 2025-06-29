@@ -23,7 +23,7 @@ class PSPNet(PatchSegmentationModel):
     }
 
     def __init__(
-        self, n_classes: int, backbone: str, dilated: bool, device: str
+        self, n_classes: int, backbone: str, dilated: bool, device: str, n_rotated: int | None = None
     ) -> None:
         """
         Initialize the PSPNet model.
@@ -34,12 +34,13 @@ class PSPNet(PatchSegmentationModel):
             dilated: Whether to use dilated convolutions
             device: Device to run the model on ('cuda', 'cpu', etc.)
         """
-        super().__init__(n_classes, device)
+        super().__init__(n_classes, device, n_rotated)
 
         from petroscope.segmentation.models.pspnet.nn import PSPNet
 
         self.backbone = backbone
         self.dilated = dilated
+        self.n_rotated = n_rotated
         # Determine appropriate weights based on backbone
         weights = None
         if backbone == "resnet18":
@@ -58,6 +59,7 @@ class PSPNet(PatchSegmentationModel):
             dilated=dilated,
             backbone=backbone,
             weights=weights,
+            n_rotated = self.n_rotated
         ).to(self.device)
 
     def _get_checkpoint_data(self) -> dict[str, Any]:
@@ -66,6 +68,7 @@ class PSPNet(PatchSegmentationModel):
             "n_classes": self.n_classes,
             "backbone": self.backbone,
             "dilated": self.dilated,
+            "n_add_imgs": self.n_rotated
         }
 
     @classmethod
@@ -78,4 +81,5 @@ class PSPNet(PatchSegmentationModel):
             backbone=checkpoint["backbone"],
             dilated=checkpoint["dilated"],
             device=device,
+            add_imgs=checkpoint.get("add_imgs", None)
         )

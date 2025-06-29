@@ -74,6 +74,7 @@ class ResUNet(PatchSegmentationModel):
             "backbone": self.backbone,
             "dilated": self.dilated,
             "pretrained": self.pretrained,
+            "add_imgs": self.n_rotated
         }
 
     @classmethod
@@ -89,6 +90,7 @@ class ResUNet(PatchSegmentationModel):
             backbone=checkpoint.get("backbone", None),
             dilated=checkpoint.get("dilated", False),
             pretrained=checkpoint.get("pretrained", True),
+            add_imgs=checkpoint.get("add_imgs", None)
         )
 
     def _load_state_dict(self, checkpoint: dict) -> None:
