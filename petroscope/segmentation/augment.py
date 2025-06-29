@@ -107,7 +107,7 @@ class PrimaryAugmentor:
         vflip_transform = A.VerticalFlip(p=0.5)
         tfms.append(hflip_transform)
         tfms.append(vflip_transform)
-
+        '''
         # 3) Brightness change
         if self.brightness_shift is not None:
             brightness_transform = A.RandomBrightnessContrast(
@@ -127,7 +127,7 @@ class PrimaryAugmentor:
                 p=1.0,
             )
             tfms.append(color_transform)
-
+        '''
         # 4) Final center crop
         if self.patch_size_int != self.patch_size_trg:
             crop_transform = A.CenterCrop(
