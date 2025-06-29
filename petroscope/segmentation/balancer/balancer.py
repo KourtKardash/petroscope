@@ -246,9 +246,12 @@ class _DsItem:
         return p
 
     def patch_random(
-        self, add_imgs: np.ndarray, size: int = None
+        self, add_imgs: np.ndarray | None, size: int = None
     ) -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
-        result_imgs = np.concatenate((self.image, *add_imgs), axis=2)
+        if add_imgs is not None:
+            result_imgs = np.concatenate((self.image, *add_imgs), axis=2)
+        else:
+            result_imgs = self.image
         s = self.patch_size_s if size is None else size
         y = self._random_state.randint(low=0, high=self.height - s)
         x = self._random_state.randint(low=0, high=self.width - s)
@@ -268,9 +271,12 @@ class _DsItem:
         return self._random_states_cls[cls_idx]
 
     def balanced_patch_sampler(
-        self, class_idx, add_imgs: np.ndarray
+        self, class_idx, add_imgs: np.ndarray | None
     ) -> Iterator[tuple[np.ndarray, np.ndarray, tuple[int, int]]]:
-        result_imgs = np.concatenate((self.image, *add_imgs), axis=2)
+        if add_imgs is not None:
+            result_imgs = np.concatenate((self.image, *add_imgs), axis=2)
+        else:
+            result_imgs = self.image
         random_state = self._random_state_for_cls(class_idx)
 
         p = self.p_maps[class_idx]
@@ -485,9 +491,10 @@ class ClassBalancedPatchDataset:
         print_class_distribution: bool = False,
         store_history: bool = False,
         seed: int | None = None,
-        add_img_dir_path: Path = Path("data/imgs_loftr"),
-        n_rotated: int = 3,
-        step_polazied: int = 60,
+        add_img_dir_path: str | None = None,
+        n_rotated: int | None = None,
+        step_polazied: int | None = None,
+        mode: bool = False
     ) -> None:
         """
         The ClassBalancedPatchDataset class is designed to extract patches from
@@ -604,11 +611,12 @@ class ClassBalancedPatchDataset:
         self.patch_pos_acc = patch_positioning_accuracy
         self.print_class_distribution = print_class_distribution
         self.store_history = store_history
-
-        self.add_img_dir_path = add_img_dir_path
-        self.add_img_paths = sorted(list(add_img_dir_path.iterdir()))
-        self.n_rotated = n_rotated
-        self.step_polazied = step_polazied
+        self.mood = mode 
+        if self.mode:
+            self.add_img_dir_path = Path(add_img_dir_path)
+            self.add_img_paths = sorted(list(add_img_dir_path.iterdir()))
+            self.n_rotated = n_rotated
+            self.step_polazied = step_polazied
 
         self.seed = seed
         self.random_state = (
@@ -679,32 +687,33 @@ class ClassBalancedPatchDataset:
 
     def _initialize(self) -> None:
         # load additional images
-        self.add_imgs = []
-        self.valid_zones = []
-        print('loading additional images with polarized minerals and calculating valid zones')
-        for add_path in tqdm(self.add_img_paths):
-            files = sorted(add_path.iterdir(), key=lambda y: int(y.stem))
-            selectedFiles = files[::self.step_polazied // 15][:self.n_rotated]
-            temp_arr = []
-            for p in selectedFiles:
-                img = cv2.imread(p)[:, :, ::-1].copy()
-                h, w = img.shape[:2]
-                new_w = int(w * 0.5)
-                new_h = int(h * 0.5)
-                img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-                temp_arr.append(img)
+        if self.mode:
+            self.add_imgs = []
+            self.valid_zones = []
+            print('loading additional images with polarized minerals and calculating valid zones')
+            for add_path in tqdm(self.add_img_paths):
+                files = sorted(add_path.iterdir(), key=lambda y: int(y.stem))
+                selectedFiles = files[::self.step_polazied // 15][:self.n_rotated]
+                temp_arr = []
+                for p in selectedFiles:
+                    img = cv2.imread(p)[:, :, ::-1].copy()
+                    h, w = img.shape[:2]
+                    new_w = int(w * 0.5)
+                    new_h = int(h * 0.5)
+                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                    temp_arr.append(img)
 
-            self.add_imgs.append(temp_arr)
-            common_mask = self._find_common_region(temp_arr)
-            kernel = np.ones((9, 9), dtype=bool)
-            eroded = binary_erosion(common_mask, structure=kernel, iterations=1)
-            self.valid_zones.append(eroded.astype(np.uint8))
-        self.add_imgs.append([np.zeros_like(self.add_imgs[0][0]) for _ in range (self.n_rotated)])
+                self.add_imgs.append(temp_arr)
+                common_mask = self._find_common_region(temp_arr)
+                kernel = np.ones((9, 9), dtype=bool)
+                eroded = binary_erosion(common_mask, structure=kernel, iterations=1)
+                self.valid_zones.append(eroded.astype(np.uint8))
+            self.add_imgs.append([np.zeros_like(self.add_imgs[0][0]) for _ in range (self.n_rotated)])
 
         # create items
         self.items = []
         for i, (img_p, mask_p) in enumerate(tqdm(self.img_mask_paths, "loading images")):
-            valid_zone_to_pass = None if i < 112 else self.valid_zones[i - 112]
+            valid_zone_to_pass = None if i < 112 or not self.mood else self.valid_zones[i - 112]
             self.items.append(_DsItem(img_p, mask_p, valid_zone_to_pass, 
                                     self.void_border_width,
                                     patch_size=self.patch_size_src,
@@ -827,12 +836,10 @@ class ClassBalancedPatchDataset:
         item_idx = self.random_state_balanced.choice(
             self._cls_items_idx[cls_idx], p=self._cls_weights[cls_idx]
         )
-
+        add_imgs = (self.add_imgs[item_idx - 112] if item_idx >= 112 else self.add_imgs[-1]) if self.mode else None
         img, mask, pos = next(
             self.items[item_idx].balanced_patch_sampler(cls_idx,
-                                                        add_imgs=self.add_imgs[item_idx - 112]
-                                                        if item_idx >= 112 
-                                                        else self.add_imgs[-1])
+                                                        add_imgs=add_imgs)
         )
         return img, mask, item_idx, pos
 
@@ -845,7 +852,7 @@ class ClassBalancedPatchDataset:
         """
         item_idx = self.random_state.choice(len(self.items))
         img, mask, pos = self.items[item_idx].patch_random(
-            self.add_imgs[-1], self.augmentor.patch_size_src
+            self.add_imgs[-1] if self.mode else None, self.augmentor.patch_size_src
         )
         img, mask = self.augmentor.augment(img, mask)
         if update_accum:

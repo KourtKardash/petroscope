@@ -291,8 +291,8 @@ class SegmDetailedTester:
         self,
         img_mask_paths: Iterable[tuple[Path, Path]],
         predict_func,
-        epoch: int = 0,
-        n_add_imgs: int = 3
+        n_add_imgs: int | None,
+        epoch: int = 0
     ) -> tuple[SegmMetrics, SegmMetrics]:
         """
         Evaluate segmentation model on a complete dataset.
@@ -317,8 +317,9 @@ class SegmDetailedTester:
         for img_mask_path in tqdm(img_mask_paths, "testing"):
             name = img_mask_path[0].stem
             img = load_image(img_mask_path[0], normalize=False)
-            h, w = img.shape[:2]
-            img = np.concatenate([img, np.zeros((h, w, n_add_imgs * 3), dtype=np.float32)], axis=-1)
+            if n_add_imgs is not None:
+                h, w = img.shape[:2]
+                img = np.concatenate([img, np.zeros((h, w, n_add_imgs * 3), dtype=np.float32)], axis=-1)
             mask = load_mask(
                 img_mask_path[1],
                 classes=self.classes,

@@ -91,7 +91,7 @@ train:
     factor: 10
 
   balancer:
-    enabled: false
+    enabled: true
     class_area_consideration: 1.5
     patch_positioning_accuracy: 0.8
     balancing_strength: 0.75

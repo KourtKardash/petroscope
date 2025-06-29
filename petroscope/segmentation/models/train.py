@@ -97,7 +97,7 @@ def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams)
         cache_dir=Path(cfg.data.cache_path),
         void_border_width=cfg.train.balancer.void_border_width,
         seed=cfg.hardware.seed,
-        add_img_dir_path=Path(anisotropic_params.add_img_dir_path),
+        add_img_dir_path=anisotropic_params.add_img_dir_path,
         n_rotated=anisotropic_params.n_rotated,
         step_polazied=anisotropic_params.step_polazied,
         mode=anisotropic_params.anisotropic_mode
@@ -196,7 +196,7 @@ def create_model(
     model_type: Literal["resunet", "pspnet", "hrnet"],
     cfg: DictConfig,
     n_classes: int,
-    n_rotated: int
+    n_rotated: int | None
 ) -> PatchSegmentationModel:
     """
     Create a segmentation model based on the specified type.
@@ -218,7 +218,7 @@ def create_model(
             backbone=cfg.model.resunet.get("backbone", None),
             dilated=cfg.model.resunet.get("dilated", False),
             pretrained=cfg.model.resunet.get("pretrained", True),
-            n_rotated=3
+            n_rotated=n_rotated
         )
     elif model_type == "pspnet":
         return PSPNet(
@@ -226,7 +226,7 @@ def create_model(
             backbone=cfg.model.pspnet.backbone,
             dilated=cfg.model.pspnet.dilated,
             device=cfg.hardware.device,
-            n_rotated=3
+            n_rotated=n_rotated
         )
     elif model_type == "hrnet":
         return HRNet(
@@ -237,7 +237,7 @@ def create_model(
             ocr_mid_channels=cfg.model.hrnet.ocr_mid_channels,
             dropout=cfg.model.hrnet.dropout,
             use_aux_head=cfg.model.hrnet.use_aux_head,
-            n_rotated=3
+            n_rotated=n_rotated
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
