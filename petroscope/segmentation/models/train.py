@@ -330,7 +330,7 @@ def run_training(anisotropic_params: AnisotropicParams, cfg: DictConfig):
             vis_segmentation=cfg.test.vis_segmentation,
             max_epoch_visualizations=cfg.test.max_epoch_visualizations,
         ),
-        out_dir=Path("."),
+        out_dir=Path("Results/Exp1"),
         amp=cfg.get("amp", False),
         gradient_clipping=cfg.get("gradient_clipping", 1.0),
         loss_config=loss_config,
