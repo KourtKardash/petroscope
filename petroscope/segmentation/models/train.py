@@ -273,7 +273,7 @@ def create_loss_manager(cfg: DictConfig, dataset, device: str):
 
 
 @hydra.main(version_base="1.2", config_path=".", config_name="config.yaml")
-def run_training(anisotropic_params: AnisotropicParams, cfg: DictConfig):
+def run_training(seed: int, model_type: str, anisotropic_params: AnisotropicParams, cfg: DictConfig):
     """
     Main training function.
 
@@ -282,10 +282,10 @@ def run_training(anisotropic_params: AnisotropicParams, cfg: DictConfig):
     """
 
     # Set the random seed for reproducibility
-    set_pytorch_seed(cfg.hardware.seed)
+    set_pytorch_seed(seed)
 
     # Get model type from config
-    model_type = cfg["model_type"]
+    #model_type = cfg["model_type"]
 
     # Load class definitions
     classes = LumenStoneClasses.from_name(cfg.data.classes)
@@ -340,10 +340,16 @@ def run_training(anisotropic_params: AnisotropicParams, cfg: DictConfig):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--anisotropic', action='store_true', help='Enable anisotropic mode')
-    args, remaining = parser.parse_known_args()
 
-    if args.anisotropic:
+    parser.add_argument('--seed', type=int, help='Random seed')
+    parser.add_argument('--model_type', type=str, help='Type of the model')
+
+    known_args, remaining = parser.parse_known_args()
+
+    use_anisotropic = '--anisotropic' in remaining
+
+    if use_anisotropic:
+        remaining.remove('--anisotropic')
         if len(remaining) != 3:
             print("Error: --anisotropic requires exactly 3 arguments: add_img_dir_path, n_rotated, step_polazied")
             sys.exit(1)
@@ -359,8 +365,8 @@ def parse_args():
             sys.exit(1)
         params = AnisotropicParams()
 
-    return params
+    return known_args.seed, known_args.model_type, params
 
 if __name__ == "__main__":
-    anisotropic_params = parse_args()
-    run_training(anisotropic_params)
+    seed, model_type, anisotropic_params = parse_args()
+    run_training(seed, model_type, anisotropic_params)
