@@ -94,7 +94,7 @@ def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams)
         patch_positioning_accuracy=cfg.train.balancer.patch_positioning_accuracy,
         balancing_strength=cfg.train.balancer.balancing_strength,
         acceleration=cfg.train.balancer.acceleration,
-        cache_dir=Path(cfg.data.cache_path),
+        cache_dir=None,
         void_border_width=cfg.train.balancer.void_border_width,
         seed=cfg.hardware.seed,
         add_img_dir_path=anisotropic_params.add_img_dir_path,
