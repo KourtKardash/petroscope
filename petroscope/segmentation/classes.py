@@ -221,6 +221,10 @@ class LumenStoneClasses:
         return ClassSet(cls._classes_for_set("S1_S2"))
 
     @classmethod
+    def S1_S2_S3(cls) -> ClassSet:
+        return ClassSet(cls._classes_for_set("S1_S2_S3"))
+
+    @classmethod
     def from_name(cls, name: str) -> ClassSet:
         func = getattr(cls, name)
         return func()

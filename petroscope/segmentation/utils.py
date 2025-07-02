@@ -176,6 +176,10 @@ def load_mask(
     import cv2
 
     mask = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    h, w = mask.shape[:2]
+    new_w = int(w * 0.5)
+    new_h = int(h * 0.5)
+    mask = cv2.resize(mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
     return _preprocess_mask(
         mask,
         classes.code_to_idx if classes is not None else None,

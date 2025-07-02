@@ -611,7 +611,7 @@ class ClassBalancedPatchDataset:
         self.patch_pos_acc = patch_positioning_accuracy
         self.print_class_distribution = print_class_distribution
         self.store_history = store_history
-        self.mood = mode 
+        self.mode = mode 
         if self.mode:
             self.add_img_dir_path = Path(add_img_dir_path)
             self.add_img_paths = sorted(list(add_img_dir_path.iterdir()))
@@ -713,9 +713,10 @@ class ClassBalancedPatchDataset:
         # create items
         self.items = []
         for i, (img_p, mask_p) in enumerate(tqdm(self.img_mask_paths, "loading images")):
-            valid_zone_to_pass = None if i < 113 or not self.mood else self.valid_zones[i - 113]
-            self.items.append(_DsItem(img_p, mask_p, valid_zone_to_pass, 
-                                    self.void_border_width,
+            valid_zone_to_pass = None if i < 113 or not self.mode else self.valid_zones[i - 113]
+            self.items.append(_DsItem(img_p, mask_p, valid_zone=valid_zone_to_pass,
+                                    mask_classes_mapping=self.mask_classes_mapping,
+                                    void_border_width=self.void_border_width,
                                     patch_size=self.patch_size_src,
                                     seed=(
                                         self.seed + _short_hash("item") + i

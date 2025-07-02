@@ -118,5 +118,5 @@ test:
 
 # Hardware settings
 hardware:
-  device: "cuda:3"
+  device: "cuda"
   seed: 40

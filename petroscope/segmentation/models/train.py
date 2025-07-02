@@ -3,6 +3,7 @@ from typing import Literal
 import warnings
 
 import argparse
+import copy
 from dataclasses import dataclass
 import hydra
 from omegaconf import DictConfig
@@ -17,6 +18,8 @@ from petroscope.segmentation.models.hrnet import HRNet
 from petroscope.segmentation.utils import BasicBatchCollector
 from petroscope.utils import logger
 
+seed = 1
+model_type = 'resunet'
 
 @dataclass
 class AnisotropicParams:
@@ -25,6 +28,7 @@ class AnisotropicParams:
     n_rotated: int = None
     step_polazied: int = None
 
+anisotropic_params = AnisotropicParams()
 
 def set_pytorch_seed(seed: int):
     """Fix all pytorch seeds for reproducibility."""
@@ -273,7 +277,7 @@ def create_loss_manager(cfg: DictConfig, dataset, device: str):
 
 
 @hydra.main(version_base="1.2", config_path=".", config_name="config.yaml")
-def run_training(seed: int, model_type: str, anisotropic_params: AnisotropicParams, cfg: DictConfig):
+def run_training(cfg: DictConfig):
     """
     Main training function.
 
@@ -339,34 +343,45 @@ def run_training(seed: int, model_type: str, anisotropic_params: AnisotropicPara
 
 
 def parse_args():
+    original_argv = sys.argv.copy()
+    
+    temp_parser = argparse.ArgumentParser(add_help=False)
+    temp_parser.add_argument('--anisotropic', action='store_true')
+    temp_args, _ = temp_parser.parse_known_args()
+    
     parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int)
+    parser.add_argument('--model_type', type=str)
+    
+    if temp_args.anisotropic:
+        parser.add_argument('--anisotropic', action='store_true')
+        parser.add_argument('add_img_dir_path', type=str)
+        parser.add_argument('n_rotated', type=int)
+        parser.add_argument('step_polazied', type=int)
+    
+    args = parser.parse_args()
 
-    parser.add_argument('--seed', type=int, help='Random seed')
-    parser.add_argument('--model_type', type=str, help='Type of the model')
-
-    known_args, remaining = parser.parse_known_args()
-
-    use_anisotropic = '--anisotropic' in remaining
-
-    if use_anisotropic:
-        remaining.remove('--anisotropic')
-        if len(remaining) != 3:
-            print("Error: --anisotropic requires exactly 3 arguments: add_img_dir_path, n_rotated, step_polazied")
-            sys.exit(1)
-
-        add_img_dir_path = remaining[0]
-        n_rotated = int(remaining[1])
-        step_polazied = int(remaining[2])
-
-        params = AnisotropicParams(True, add_img_dir_path, n_rotated, step_polazied)
+    if hasattr(args, 'add_img_dir_path'):
+        params = AnisotropicParams(
+            enabled=True,
+            add_img_dir_path=args.add_img_dir_path,
+            n_rotated=args.n_rotated,
+            step_polazied=args.step_polazied
+        )
     else:
-        if remaining:
-            print("Error: unexpected arguments provided without --anisotropic flag.")
-            sys.exit(1)
         params = AnisotropicParams()
-
-    return known_args.seed, known_args.model_type, params
+    
+    sys.argv = [sys.argv[0]]
+    
+    return args.seed, args.model_type, params
 
 if __name__ == "__main__":
-    seed, model_type, anisotropic_params = parse_args()
-    run_training(seed, model_type, anisotropic_params)
+    seed, model_type, params = parse_args()
+    anisotropic_params = copy.copy(params)
+
+    print(f"Seed: {seed}")
+    print(f"Model type: {model_type}")
+    print(f"Anisotropic params: {anisotropic_params}")
+    print(f"Cleaned sys.argv: {sys.argv}")
+
+    run_training()
