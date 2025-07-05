@@ -363,7 +363,7 @@ def parse_args():
 
     if hasattr(args, 'add_img_dir_path'):
         params = AnisotropicParams(
-            enabled=True,
+            anisotropic_mode=True,
             add_img_dir_path=args.add_img_dir_path,
             n_rotated=args.n_rotated,
             step_polazied=args.step_polazied

@@ -614,7 +614,7 @@ class ClassBalancedPatchDataset:
         self.mode = mode 
         if self.mode:
             self.add_img_dir_path = Path(add_img_dir_path)
-            self.add_img_paths = sorted(list(add_img_dir_path.iterdir()))
+            self.add_img_paths = sorted(list(self.add_img_dir_path.iterdir()))
             self.n_rotated = n_rotated
             self.step_polazied = step_polazied
 
