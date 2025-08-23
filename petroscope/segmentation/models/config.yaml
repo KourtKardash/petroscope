@@ -10,10 +10,10 @@ model:
   # ResUNet specific parameters
   resunet:
     layers: 4                  # Number of layers in the network (only used if no backbone)
-    filters: 24                # Number of starting filters (only used if no backbone)
-    backbone: resnet34         # Options: null, resnet18, resnet34, resnet50, resnet101, resnet152
+    filters: 16                # Number of starting filters (only used if no backbone)
+    backbone:                  # Options: null, resnet18, resnet34, resnet50, resnet101, resnet152
     dilated: true              # Whether to use dilated convolutions
-    pretrained: true           # Whether to use pretrained backbone weights
+    pretrained: false          # Whether to use pretrained backbone weights
   
   # PSPNet specific parameters
   pspnet:
@@ -30,12 +30,12 @@ model:
 
 # Training settings
 train:
-  epochs: 50
+  epochs: 80
   patch_size: 384
   batch_size: 64
   LR: 0.001
   scheduler_patience: 4
-  val_steps: 30
+  val_steps: 80
   test_every: 1
   amp: False
   gradient_clipping: 1.0
@@ -106,15 +106,15 @@ train:
 # Data settings
 data:
   classes: "S1_S2_S3"
-  cache_path: "Data/Cache"
-  dataset_path: "Data/S1_v2_S2_v2_S3_v1"
+  cache_path: "Cache"
+  dataset_path: "data"
 
 # Test settings
 test:
   void_pad: 4
   void_border_width: 2
   vis_segmentation: true
-  max_epoch_visualizations: 15  # Keep visualizations for only the last N epochs
+  max_epoch_visualizations: 50  # Keep visualizations for only the last N epochs
 
 # Hardware settings
 hardware:

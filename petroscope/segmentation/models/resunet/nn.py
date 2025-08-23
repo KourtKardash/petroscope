@@ -25,7 +25,7 @@ from torchvision.models import (
 
 
 class ConvResBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dilation=1):
         super(ConvResBlock, self).__init__()
         self.conv0 = nn.Conv2d(
             in_channels, out_channels, kernel_size=1, padding="same"
@@ -141,20 +141,26 @@ class ResUNetBase(nn.Module):
         n_layers: int,
         start_filters: int,
         dilated: bool = False,
+        n_rotated: int | None = None
     ):
         super(ResUNetBase, self).__init__()
         self.n_classes = n_classes
         self.n_layers = n_layers
         self.start_filters = start_filters
         self.dilated = dilated
+        self.n_rotated = n_rotated
 
         # Use dilated convolutions in the downsampling path if specified
         Block = DilatedConvResBlock if dilated else ConvResBlock
 
         # For dilated model, use different dilation rates in different layers
         dilation_rates = [1, 1, 2, 4] if dilated else [1, 1, 1, 1]
+        
+        if self.n_rotated is None:
+            self.down1 = Block(3, start_filters, dilation_rates[0])
+        else:
+            self.down1 = Block((self.n_rotated + 1) * 3, start_filters, dilation_rates[0])
 
-        self.down1 = Block(3, start_filters, dilation_rates[0])
         self.down2 = Block(start_filters, start_filters * 2, dilation_rates[1])
         self.down3 = Block(
             start_filters * 2, start_filters * 4, dilation_rates[2]
@@ -259,6 +265,7 @@ class ResUNet(nn.Module):
                 n_layers=n_layers,
                 start_filters=start_filters,
                 dilated=dilated,
+                n_rotated=self.n_rotated
             )
         else:
             # Validate backbone selection
@@ -322,9 +329,10 @@ class ResUNet(nn.Module):
                 bias=old_conv1.bias is not None
             )
             
-            new_weights = torch.cat([old_conv1.weight.data] * (self.n_rotated + 1), dim=1) / (self.n_rotated + 1)
+            new_weights = torch.empty_like(new_conv1.weight.data)
+            new_weights[:, :3, :, :] = old_conv1.weight.data
+            nn.init.kaiming_normal_(new_weights[:, 3:, :, :], mode='fan_out', nonlinearity='relu')
             new_conv1.weight.data = new_weights
-            
             if old_conv1.bias is not None:
                 new_conv1.bias.data = old_conv1.bias.data
             

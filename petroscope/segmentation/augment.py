@@ -5,7 +5,7 @@ import cv2
 
 class PrimaryAugmentor:
     """
-    Albumentations‐based augmentor that performs, in order:
+    AlbumentationsвЂђbased augmentor that performs, in order:
       1. random scale (zoom)
       2. random rotation
       3. horizontal + vertical flips
@@ -14,7 +14,7 @@ class PrimaryAugmentor:
       6. center crop to final patch size
 
     Works for both image-only and (image, mask) inputs;
-    masks always get nearest‐neighbor interpolation.
+    masks always get nearestвЂђneighbor interpolation.
     """
 
     def __init__(
@@ -153,8 +153,8 @@ class PrimaryAugmentor:
         Apply the augmentation pipeline.
 
         Args:
-            img: H×W×3 uint8 array (image)
-            mask: H×W single‐channel uint8 array (optional mask)
+            img: HГ—WГ—3 uint8 array (image)
+            mask: HГ—W singleвЂђchannel uint8 array (optional mask)
 
         Returns:
             If mask is given: (augmented_img, augmented_mask)

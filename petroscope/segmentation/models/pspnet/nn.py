@@ -101,9 +101,12 @@ class PSPNet(nn.Module):
                 bias=old_conv1.bias is not None
             )
             
-            new_weights = torch.cat([old_conv1.weight.data] * (self.n_rotated + 1), dim=1) / (self.n_rotated + 1)
+            new_weights = torch.empty_like(new_conv1.weight.data)
+            new_weights[:, :3, :, :] = old_conv1.weight.data  
+            nn.init.kaiming_normal_(new_weights[:, 3:, :, :], mode='fan_out', nonlinearity='relu')
+
             new_conv1.weight.data = new_weights
-            
+
             if old_conv1.bias is not None:
                 new_conv1.bias.data = old_conv1.bias.data
             

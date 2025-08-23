@@ -52,7 +52,7 @@ class FocalLoss(nn.Module):
     """
     Focal Loss implementation for addressing class imbalance.
 
-    Reference: Lin, T. Y., Goyal, P., Girshick, R., He, K., & Dollár, P.
+    Reference: Lin, T. Y., Goyal, P., Girshick, R., He, K., & DollГЎr, P.
     (2017). Focal loss for dense object detection. ICCV, 2017.
     """
 

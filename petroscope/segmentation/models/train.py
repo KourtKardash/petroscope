@@ -24,7 +24,6 @@ model_type = 'resunet'
 @dataclass
 class AnisotropicParams:
     anisotropic_mode: bool = False
-    add_img_dir_path: str = None
     n_rotated: int = None
     step_polazied: int = None
 
@@ -66,7 +65,7 @@ def test_img_mask_pairs(cfg: DictConfig):
     ds_dir = Path(cfg.data.dataset_path)
     test_img_mask_p = [
         (img_p, ds_dir / "masks" / "test" / f"{img_p.stem}.png")
-        for img_p in sorted((ds_dir / "imgs" / "test").iterdir())
+        for img_p in sorted((ds_dir / "imgs" / "test").iterdir(), key=lambda p: int(p.stem))
     ]
     return test_img_mask_p
 
@@ -83,7 +82,7 @@ def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams)
     ds_dir = Path(cfg.data.dataset_path)
     train_img_mask_p = [
         (img_p, ds_dir / "masks" / "train" / f"{img_p.stem}.png")
-        for img_p in sorted((ds_dir / "imgs" / "train").iterdir())
+        for img_p in sorted((ds_dir / "imgs" / "train").iterdir(), key=lambda p: int(p.stem))
     ]
 
     return ClassBalancedPatchDataset(
@@ -101,7 +100,7 @@ def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams)
         cache_dir=None,
         void_border_width=cfg.train.balancer.void_border_width,
         seed=cfg.hardware.seed,
-        add_img_dir_path=anisotropic_params.add_img_dir_path,
+        add_img_dir_path="loftr",
         n_rotated=anisotropic_params.n_rotated,
         step_polazied=anisotropic_params.step_polazied,
         mode=anisotropic_params.anisotropic_mode
@@ -316,6 +315,12 @@ def run_training(cfg: DictConfig):
         else None
     )
 
+
+    if not anisotropic_params.anisotropic_mode:
+        output = f"results_base_{seed}"
+    else:
+        output = f"results_loftr{anisotropic_params.n_rotated}_{seed}"
+
     # Train the model
     model.train(
         train_iterator=train_iterator,
@@ -334,7 +339,7 @@ def run_training(cfg: DictConfig):
             vis_segmentation=cfg.test.vis_segmentation,
             max_epoch_visualizations=cfg.test.max_epoch_visualizations,
         ),
-        out_dir=Path("Results/Exp1"),
+        out_dir=Path(output),
         amp=cfg.get("amp", False),
         gradient_clipping=cfg.get("gradient_clipping", 1.0),
         loss_config=loss_config,
@@ -355,16 +360,14 @@ def parse_args():
     
     if temp_args.anisotropic:
         parser.add_argument('--anisotropic', action='store_true')
-        parser.add_argument('add_img_dir_path', type=str)
         parser.add_argument('n_rotated', type=int)
         parser.add_argument('step_polazied', type=int)
     
     args = parser.parse_args()
 
-    if hasattr(args, 'add_img_dir_path'):
+    if hasattr(args, 'n_rotated'):
         params = AnisotropicParams(
             anisotropic_mode=True,
-            add_img_dir_path=args.add_img_dir_path,
             n_rotated=args.n_rotated,
             step_polazied=args.step_polazied
         )
