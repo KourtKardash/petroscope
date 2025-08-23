@@ -3,8 +3,12 @@ from pathlib import Path
 from typing import Iterable, Iterator
 import json
 
+import numpy as np
 import yaml
+from PIL import Image
+from tqdm import tqdm
 
+from petroscope.utils import logger
 
 @dataclass
 class Class:
@@ -53,25 +57,25 @@ class ClassSet:
 
     def __init__(self, classes: Iterable[Class]) -> None:
         self.classes = list(classes)
-        # Precompute mappings
-        self.code_to_idx = {cl.code: i for i, cl in enumerate(self.classes)}
-        self.idx_to_code = {i: cl.code for i, cl in enumerate(self.classes)}
+
+        # Extract class codes for easier access
+        self._codes = [cl.code for cl in self.classes]
+
         self.code_to_class = {cl.code: cl for cl in self.classes}
-        self.idx_to_color_rgb = {
-            i: self._convert_color(cl.color)
-            for i, cl in enumerate(self.classes)
-        }
+
+        # Color mappings using original codes
         self.code_to_color_rgb = {
             cl.code: self._convert_color(cl.color) for cl in self.classes
         }
-        # Add BGR color mappings for OpenCV compatibility
-        self.idx_to_color_bgr = {
-            i: cl.color_bgr for i, cl in enumerate(self.classes)
-        }
+
         self.code_to_color_bgr = {cl.code: cl.color_bgr for cl in self.classes}
 
     def __len__(self):
         return len(self.classes)
+    
+    def __str__(self) -> str:
+        class_list = "\n  ".join(str(cl) for cl in self.classes)
+        return f"ClassSet with {len(self.classes)} classes:\n  {class_list}"
 
     @property
     def labels(self) -> tuple[str, ...]:
@@ -84,36 +88,21 @@ class ClassSet:
         return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
 
     @property
-    def idx_to_label(self) -> dict[int, str]:
-        return {i: cl.label for i, cl in enumerate(self.classes)}
-
-    @property
     def code_to_label(self) -> dict[int, str]:
         return {cl.code: cl.label for cl in self.classes}
 
-    def colors_map(
-        self, squeezed: bool, bgr=False
-    ) -> dict[int, tuple[int, int, int]]:
+    def colors_map(self, bgr=False) -> dict[int, tuple[int, int, int]]:
         """
-        Returns a mapping of class indices or codes to colors.
+        Returns a mapping of class codes to colors.
 
         Args:
-            squeezed (bool): If True, returns mapping from indices to colors,
-                            otherwise returns mapping from codes to colors.
             bgr (bool): If True, returns BGR colors for OpenCV,
                        otherwise returns RGB colors.
 
         Returns:
-            dict[int, tuple[int, int, int]]: A mapping of indices or codes to colors.
+            dict[int, tuple[int, int, int]]: A mapping of codes to colors.
         """
-        if bgr:
-            return (
-                self.idx_to_color_bgr if squeezed else self.code_to_color_bgr
-            )
-        else:
-            return (
-                self.idx_to_color_rgb if squeezed else self.code_to_color_rgb
-            )
+        return self.code_to_color_bgr if bgr else self.code_to_color_rgb
 
     @property
     def labels_to_colors_plt(self) -> dict[str, tuple[float, float, float]]:
@@ -192,6 +181,16 @@ class LumenStoneClasses:
         return cls._config
 
     @classmethod
+    def max_classes(cls) -> int:
+        """
+        Get the maximum number of classes defined in the configuration.
+
+        Returns:
+            int: Maximum number of classes for model output (fixed at 50)
+        """
+        return cls.get_config()["max_classes"]
+
+    @classmethod
     def all(cls) -> ClassSet:
         if cls._classes is None:
             cls._classes = [
@@ -228,3 +227,77 @@ class LumenStoneClasses:
     def from_name(cls, name: str) -> ClassSet:
         func = getattr(cls, name)
         return func()
+    
+    @classmethod
+    def from_ids(cls, ids: list[int]) -> ClassSet:
+        """
+        Create a ClassSet containing only the classes with the specified
+        codes (ids).
+
+        Args:
+            ids (list[int]): List of class codes to include.
+
+        Returns:
+            ClassSet: A set containing only the specified classes.
+        """
+        selected = [cl for cl in cls.all().classes if cl.code in ids]
+        return ClassSet(selected)
+    
+    @classmethod
+    def auto_from_dataset(
+        cls, img_mask_paths: Iterable[tuple[Path, Path]]
+    ) -> ClassSet:
+        """
+        Auto-detect known classes present in a dataset.
+
+        Scans all mask files to find class codes that are defined in
+        lumenstone.yaml. Unknown classes are logged but ignored.
+
+        Args:
+            img_mask_paths: List of (image_path, mask_path) tuples.
+
+        Returns:
+            ClassSet: ClassSet with detected known classes
+        """
+        detected_codes = set()
+        unknown_codes = set()
+
+        # Get known classes from lumenstone configuration
+        known_classes = {cl.code: cl for cl in cls.all().classes}
+
+        # Scan all mask files to find unique class codes
+        for img_path, mask_path in tqdm(
+            img_mask_paths, desc="Auto-detecting classes"
+        ):
+            try:
+                # Load mask and find unique values
+                mask = np.array(Image.open(mask_path))
+                if mask.ndim == 3:
+                    mask = mask[:, :, 0]
+
+                unique_codes = np.unique(mask)
+                # Filter out void class (255)
+                unique_codes = unique_codes[unique_codes != 255]
+
+                for code in unique_codes:
+                    if code in known_classes:
+                        detected_codes.add(code)
+                    else:
+                        unknown_codes.add(code)
+
+            except Exception as e:
+                logger.warning(f"Could not read mask {mask_path}: {e}")
+                continue
+
+        detected_codes = sorted(list(detected_codes))
+
+        # Log unknown classes if found
+        if unknown_codes:
+            logger.warning(
+                f"Found unknown class codes {sorted(unknown_codes)} "
+                f"in dataset. Only known classes will be used."
+            )
+
+        # Return ClassSet with only detected known classes
+        detected_classes = [known_classes[code] for code in detected_codes]
+        return ClassSet(detected_classes)

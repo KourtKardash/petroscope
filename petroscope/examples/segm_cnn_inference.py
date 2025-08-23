@@ -30,7 +30,7 @@ def run_inference(img_path: Path, out_dir: Path, device: str):
 
     pred_colored = SegmVisualizer.colorize_mask(
         pred,
-        classes.colors_map(squeezed=False),
+        classes.colors_map(),
     )
     cv2.imwrite(
         out_dir / f"{img_path.stem}_pred_colored.jpg",
@@ -40,8 +40,7 @@ def run_inference(img_path: Path, out_dir: Path, device: str):
     v = SegmVisualizer.vis_prediction(
         img[:, :, ::-1],
         pred,
-        classes,
-        classes_squeezed=True,
+        classes
     )
     cv2.imwrite(
         out_dir / f"{img_path.stem}_pred_composite.jpg",

@@ -4,9 +4,30 @@ from typing import Iterable, Iterator
 
 import numpy as np
 
-from petroscope.segmentation.classes import ClassSet
 from petroscope.utils import logger
 
+
+def get_img_mask_pairs(ds_dir: Path, sample: str) -> list[tuple[Path, Path]]:
+    """
+    Get image-mask path pairs from dataset directory.
+
+    Args:
+        ds_dir: Dataset root directory
+        sample: Dataset sample ("train" or "test")
+
+    Returns:
+        List of (image_path, mask_path) tuples
+    """
+    img_dir = ds_dir / "imgs" / sample
+    mask_dir = ds_dir / "masks" / sample
+
+    img_mask_pairs = [
+        (img_p, mask_dir / f"{img_p.stem}.png")
+        for img_p in sorted(img_dir.iterdir())
+        if img_p.suffix.lower() in {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+    ]
+
+    return img_mask_pairs
 
 # +
 def avg_pool_2d(mat: np.ndarray, kernel_size: int = 4) -> np.ndarray:
@@ -64,59 +85,6 @@ def to_categorical(x: np.ndarray, n_classes: int) -> np.ndarray:
     categorical = np.reshape(categorical, output_shape)
     return categorical
 
-
-# +
-def _squeeze_mask(
-    mask: np.ndarray, squeeze: dict[int, int], void_val: int | None = 255
-) -> np.ndarray:
-    """
-    Squeezes the mask by replacing certain values with others. Supports void
-    values (can be used in masks near class borders).
-
-    Args:
-        mask (np.ndarray): The input mask to be squeezed.
-        squeeze (dict[int, int]): A dictionary mapping original values to new
-        values.
-        void_val (bool | None, optional): Void value that will not be replaced.
-        Defaults to 255. If None, void values will not be processed.
-
-    Returns:
-        np.ndarray: The squeezed mask.
-    """
-    if mask.ndim != 2:
-        raise ValueError("Mask should be 2D")
-    if mask.dtype != np.uint8:
-        raise ValueError("Mask should be of type uint8")
-    new_mask = np.zeros_like(mask)
-    for i, j in squeeze.items():
-        new_mask[mask == i] = j
-    if void_val is not None:
-        new_mask[mask == void_val] = void_val
-    return new_mask
-
-
-# +
-def _preprocess_mask(
-    mask: np.ndarray,
-    squeeze: dict[int, int] | None,
-    one_hot=True,
-    to_float=True,
-):
-    if mask.dtype != np.uint8:
-        raise ValueError("Mask should be of type uint8")
-    # reduce dimensions if needed
-    if mask.ndim == 3:
-        mask = mask[:, :, 0]
-    # squeeze mask if needed
-    new_mask = _squeeze_mask(mask, squeeze) if squeeze is not None else mask
-    # convert to one-hot if needed
-    new_mask = to_categorical(new_mask, len(squeeze)) if one_hot else new_mask
-    # convert to float if needed
-    if to_float:
-        new_mask = new_mask.astype(np.float32)
-    return new_mask
-
-
 # +
 def load_image(path: Path, normalize=False, to_float=False) -> np.ndarray:
     """
@@ -152,7 +120,7 @@ def load_image(path: Path, normalize=False, to_float=False) -> np.ndarray:
 # +
 def load_mask(
     path: Path,
-    classes: ClassSet | None = None,
+    max_classes: int | None = None,
     one_hot=False,
     to_float=False,
 ) -> np.ndarray:
@@ -180,12 +148,26 @@ def load_mask(
     new_w = int(w * 0.5)
     new_h = int(h * 0.5)
     mask = cv2.resize(mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-    return _preprocess_mask(
-        mask,
-        classes.code_to_idx if classes is not None else None,
-        one_hot=one_hot,
-        to_float=to_float,
-    )
+
+    # Validate mask format
+    if mask.dtype != np.uint8:
+        raise ValueError("Mask should be of type uint8")
+
+    # Reduce dimensions if needed (some masks might be loaded as 3D)
+    if mask.ndim == 3:
+        mask = mask[:, :, 0]
+
+    # Convert to one-hot encoding if requested
+    if one_hot:
+        if max_classes is None:
+            raise ValueError("max_classes must be provided when one_hot=True")
+        mask = to_categorical(mask, max_classes)
+
+    # Convert to float if requested
+    if to_float:
+        mask = mask.astype(np.float32)
+
+    return mask
 
 
 # +

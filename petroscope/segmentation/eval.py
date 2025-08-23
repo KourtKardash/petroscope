@@ -45,16 +45,16 @@ class SegmEvaluator:
         Buffer for individual image metrics.
     """
 
-    def __init__(self, idx_to_labels) -> None:
+    def __init__(self, code_to_label) -> None:
         """
         Initialize evaluator with class label mappings.
 
         Parameters
         ----------
-        idx_to_labels : dict
-            Class indices to string labels mapping.
+        code_to_label : dict
+            Class code to label mappings.
         """
-        self.idx_to_lbls = idx_to_labels
+        self.code_to_label = code_to_label
         self.buffer: list[SegmMetrics] = []
 
     def evaluate(
@@ -109,8 +109,8 @@ class SegmEvaluator:
             gt *= void
 
         # Calculate per-class IoU
-        iou_class_soft = iou_per_class(gt, pred, self.idx_to_lbls)
-        iou_class_hard = iou_per_class(gt, pred_hard, self.idx_to_lbls)
+        iou_class_soft = iou_per_class(gt, pred, self.code_to_label)
+        iou_class_hard = iou_per_class(gt, pred_hard, self.code_to_label)
 
         img_metrics = SegmMetrics(
             iou_soft=iou_class_soft,
@@ -167,8 +167,10 @@ class SegmDetailedTester:
         self,
         out_dir: Path,
         classes: ClassSet,
+        max_classes: int,
         void_pad: int = 0,
         void_border_width: int = 0,
+        void_rare_classes: list[int] | None = None,
         vis_segmentation: bool = True,
         detailed_logger: DetailedTestLogger = None,
     ):
@@ -185,6 +187,8 @@ class SegmDetailedTester:
             Additional padding for void regions.
         void_border_width : int, default 0
             Width of border regions to mark as void.
+        void_rare_classes : list[int], optional
+            List of class codes to void during testing.
         vis_segmentation : bool, default True
             Whether to generate visualizations.
         detailed_logger : DetailedTestLogger, optional
@@ -193,11 +197,42 @@ class SegmDetailedTester:
         self.vis_segmentation = vis_segmentation
         self.out_dir = out_dir
         self.classes = classes
+        self.max_classes = max_classes
         self.void_w = void_border_width
         self.void_pad = void_pad
-        self.eval_full = SegmEvaluator(idx_to_labels=classes.idx_to_label)
-        self.eval_void = SegmEvaluator(idx_to_labels=classes.idx_to_label)
+        self.void_rare_classes = void_rare_classes or []
+        self.eval_full = SegmEvaluator(code_to_label=classes.code_to_label)
+        self.eval_void = SegmEvaluator(code_to_label=classes.code_to_label)
         self.detailed_logger = detailed_logger
+
+    def _apply_void_rare_classes(self, mask: np.ndarray) -> np.ndarray:
+        """
+        Apply void rare classes to ground truth mask.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            Ground truth mask (one-hot or categorical).
+
+        Returns
+        -------
+        np.ndarray
+            Mask with rare classes voided.
+        """
+        if not self.void_rare_classes:
+            return mask
+
+        mask_copy = mask.copy()
+        # Handle both categorical and one-hot masks
+        if mask.ndim == 2:  # Categorical mask
+            for class_code in self.void_rare_classes:
+                mask_copy[mask_copy == class_code] = 255
+        else:  # One-hot mask
+            for class_code in self.void_rare_classes:
+                if class_code < mask.shape[-1]:
+                    mask_copy[..., class_code] = 0
+
+        return mask_copy
 
     def _visualize(
         self,
@@ -226,23 +261,13 @@ class SegmDetailedTester:
         img_name : str
             Base name for output file.
         """
-        # Convert masks to categorical indices
-        pred = (
-            pred_mask if pred_mask.ndim == 2 else np.argmax(pred_mask, axis=-1)
-        ).astype(np.uint8)
-        gt = (
-            gt_mask if gt_mask.ndim == 2 else np.argmax(gt_mask, axis=-1)
-        ).astype(np.uint8)
-
         # Generate composite visualization
         composite_vis = SegmVisualizer.vis_test(
-            img[:, :, ::-1],  # Convert RGB to BGR
-            gt,
-            pred,
+            source_bgr=img[:, :, ::-1],  # Convert RGB to BGR
+            mask_gt=gt_mask,
+            mask_pred=pred_mask,
             classes=self.classes,
             void_mask=void_mask,
-            mask_gt_squeezed=True,
-            mask_pred_squeezed=True,
         )
 
         # Save with high quality
@@ -322,9 +347,10 @@ class SegmDetailedTester:
                 img = np.concatenate([img, np.zeros((h, w, n_add_imgs * 3), dtype=np.uint8)], axis=-1)
             mask = load_mask(
                 img_mask_path[1],
-                classes=self.classes,
+                max_classes=self.max_classes,
                 one_hot=True,
             )
+            mask = self._apply_void_rare_classes(mask)
             pred = predict_func(img)
             void = void_borders(
                 mask, border_width=self.void_w, pad=self.void_pad
@@ -341,8 +367,12 @@ class SegmDetailedTester:
 
             # Generate visualization if enabled
             if self.vis_segmentation:
-                self._visualize(img[:,:,:3], mask, pred, void, sub_dir, f"img_{name}")
-
+                # Convert one-hot to class indices for efficient visualization
+                mask_hard = np.argmax(mask, axis=-1).astype(np.uint8)
+                pred_hard = np.argmax(pred, axis=-1).astype(np.uint8)
+                self._visualize(
+                    img, mask_hard, pred_hard, void, sub_dir, f"img_{name}"
+                )
         # Aggregate metrics for the dataset
         metrics_set = self.eval_full.flush()
         metrics_void_set = self.eval_void.flush()

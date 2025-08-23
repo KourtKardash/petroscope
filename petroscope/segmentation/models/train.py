@@ -15,7 +15,11 @@ from petroscope.segmentation.models.base import PatchSegmentationModel
 from petroscope.segmentation.models.resunet.model import ResUNet
 from petroscope.segmentation.models.pspnet.model import PSPNet
 from petroscope.segmentation.models.hrnet import HRNet
-from petroscope.segmentation.utils import BasicBatchCollector
+
+from petroscope.segmentation.utils import (
+    BasicBatchCollector,
+    get_img_mask_pairs,
+)
 from petroscope.utils import logger
 
 seed = 1
@@ -59,31 +63,22 @@ def set_pytorch_seed(seed: int):
         )
         torch.use_deterministic_algorithms(True, warn_only=True)
 
-
-def test_img_mask_pairs(cfg: DictConfig):
-    """Get test image-mask pairs from the dataset."""
-    ds_dir = Path(cfg.data.dataset_path)
-    test_img_mask_p = [
-        (img_p, ds_dir / "masks" / "test" / f"{img_p.stem}.png")
-        for img_p in sorted((ds_dir / "imgs" / "test").iterdir(), key=lambda p: int(p.stem))
-    ]
-    return test_img_mask_p
-
-
-def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams):
+def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams, class_set=None):
     """Create a training dataset.
 
     Args:
         cfg: Configuration object
+        class_set: Optional ClassSet to use instead of loading from config
 
     Returns:
         ClassBalancedPatchDataset instance
     """
     ds_dir = Path(cfg.data.dataset_path)
-    train_img_mask_p = [
-        (img_p, ds_dir / "masks" / "train" / f"{img_p.stem}.png")
-        for img_p in sorted((ds_dir / "imgs" / "train").iterdir(), key=lambda p: int(p.stem))
-    ]
+    train_img_mask_p = get_img_mask_pairs(ds_dir, "train")
+
+    # Use provided class_set or load from config
+    if class_set is None:
+        class_set = LumenStoneClasses.from_name(cfg.data.classes)
 
     return ClassBalancedPatchDataset(
         img_mask_paths=train_img_mask_p,
@@ -92,9 +87,11 @@ def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams)
         augment_scale=cfg.train.augm.scale,
         augment_brightness=cfg.train.augm.brightness,
         augment_color=cfg.train.augm.color,
-        class_set=LumenStoneClasses.from_name(cfg.data.classes),
+        class_set=class_set,
         class_area_consideration=cfg.train.balancer.class_area_consideration,
-        patch_positioning_accuracy=cfg.train.balancer.patch_positioning_accuracy,
+        patch_positioning_accuracy=(
+            cfg.train.balancer.patch_positioning_accuracy
+        ),
         balancing_strength=cfg.train.balancer.balancing_strength,
         acceleration=cfg.train.balancer.acceleration,
         cache_dir=None,
@@ -291,16 +288,33 @@ def run_training(cfg: DictConfig):
     #model_type = cfg["model_type"]
 
     # Load class definitions
-    classes = LumenStoneClasses.from_name(cfg.data.classes)
+    if cfg.data.classes == "auto":
+        logger.info("Auto-detecting classes from training dataset...")
 
-    # Create the training dataset
-    train_ds = create_train_dataset(cfg, anisotropic_params)
+        # Get training image-mask pairs for scanning
+        ds_dir = Path(cfg.data.dataset_path)
+        train_img_mask_paths = get_img_mask_pairs(ds_dir, "train")
+
+        # Auto-detect the classes (only known ones)
+        classes = LumenStoneClasses.auto_from_dataset(train_img_mask_paths)
+
+        logger.info(f"Auto-detected classes:\n{classes}")
+
+        # Create the training dataset with detected classes
+        train_ds = create_train_dataset(cfg, class_set=classes)
+    else:
+        classes = LumenStoneClasses.from_name(cfg.data.classes)
+        logger.info(f"Using predefined class set: {cfg.data.classes}")
+        logger.info(f"{classes}")
+
+        # Create the training dataset
+        train_ds = create_train_dataset(cfg)
 
     # Create data samplers using the dataset
     train_iterator, val_iterator, ds_len = create_samplers(train_ds, cfg)
-
-    # Create model
-    model = create_model(model_type, cfg, len(classes), anisotropic_params.n_rotated)
+    
+    # Create model - use max_classes from LumenStone class definitions
+    model = create_model(model_type, cfg, LumenStoneClasses.max_classes(), anisotropic_params.n_rotated)
 
     logger.info(f"Training {model_type.upper()} model")
     logger.info(model.n_params_str)
@@ -333,11 +347,14 @@ def run_training(cfg: DictConfig):
         test_every=cfg.train.test_every,
         test_params=model.TestParams(
             classes=classes,
-            img_mask_paths=test_img_mask_pairs(cfg),
+            img_mask_paths=get_img_mask_pairs(
+                Path(cfg.data.dataset_path), "test"
+            ),
             void_pad=cfg.test.void_pad,
             void_border_width=cfg.test.void_border_width,
             vis_segmentation=cfg.test.vis_segmentation,
             max_epoch_visualizations=cfg.test.max_epoch_visualizations,
+            void_rare_classes=cfg.test.void_rare_classes.class_codes,
         ),
         out_dir=Path(output),
         amp=cfg.get("amp", False),
