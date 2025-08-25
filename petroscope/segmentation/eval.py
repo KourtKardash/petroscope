@@ -260,7 +260,6 @@ class SegmDetailedTester:
             Mask with rare classes voided.
         """
         if not self.void_rare_classes:
-            print("wtf i don't exist")
             return mask
 
         mask_copy = mask.copy()
