@@ -49,7 +49,7 @@ def fast_void_borders(
                         mask[..., cl], structure=element, border_value=0
                     )
                     void += eroded
-
+        
         void[void > 0] = 1
 
     if pad > 0:

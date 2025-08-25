@@ -260,6 +260,7 @@ class SegmDetailedTester:
             Mask with rare classes voided.
         """
         if not self.void_rare_classes:
+            print("wtf i don't exist")
             return mask
 
         mask_copy = mask.copy()
@@ -392,6 +393,7 @@ class SegmDetailedTester:
             )
             mask = self._apply_void_rare_classes(mask)
             pred = predict_func(img)
+            pred = self._apply_void_rare_classes(pred)
             # Use fast void_borders if enabled
             if self.use_fast_evaluation:
                 void = fast_void_borders(
