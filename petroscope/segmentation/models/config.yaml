@@ -30,7 +30,7 @@ model:
 
 # Training settings
 train:
-  epochs: 80
+  epochs: 50
   patch_size: 384
   batch_size: 64
   LR: 0.001
@@ -101,7 +101,7 @@ train:
   # Void rare classes configuration for training
   void_rare_classes:
     enabled: false
-    class_codes: []  # List of class codes to exclude from training
+    class_codes: [14]  # List of class codes to exclude from training
                      # NOTE: These must be subset of classes defined by data.classes
                      # Example: if data.classes="S1_S2" defines [0,1,2,3,4,5,6,7,8,11]
                      # and void_rare_classes=[8,11], then training uses [0,1,2,3,4,5,6,7]
@@ -124,7 +124,7 @@ test:
   void_border_width: 2
   void_rare_classes:
     enabled: false
-    class_codes: []  # List of class codes to void during testing
+    class_codes: [14]  # List of class codes to void during testing
                      # NOTE: Should usually match training void_rare_classes
                      # Only classes defined in data.classes can be voided
                      # All undefined classes (not in ClassSet) are automatically ignored

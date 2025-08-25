@@ -70,6 +70,7 @@ class _DsItem:
         self,
         img_path: Path,
         mask_path: Path,
+        void_rare_classes: list[int] | None,
         valid_zone: np.ndarray | None,
         void_border_width: int | None,
         patch_size: int,
@@ -77,6 +78,7 @@ class _DsItem:
     ) -> None:
         self.img_path = img_path
         self.mask_path = mask_path
+        self.void_rare_classes = void_rare_classes
         self.void_border_width = void_border_width
         self.patch_size = patch_size
         self.valid_zone = valid_zone
@@ -98,6 +100,9 @@ class _DsItem:
     def _load(self) -> None:
         self.image = load_image(self.img_path)
         self.mask = load_mask(self.mask_path)
+        
+        for class_code in self.void_rare_classes:
+            self.mask[self.mask == class_code] = 255
 
         if self.void_border_width is not None:
             void = void_borders(self.mask, border_width=self.void_border_width)
@@ -462,6 +467,7 @@ class ClassBalancedPatchDataset:
         self,
         img_mask_paths: Iterable[tuple[Path, Path]],
         patch_size: int,
+        void_rare_classes: list[int] | None,
         cache_dir: Path | None = None,
         class_set: ClassSet | None = None,
         void_border_width: int | None = None,
@@ -589,6 +595,7 @@ class ClassBalancedPatchDataset:
         self.patch_pos_acc = patch_positioning_accuracy
         self.print_class_distribution = print_class_distribution
         self.store_history = store_history
+        self.void_rare_classes = void_rare_classes
         self.mode = mode 
         if self.mode:
             self.add_img_dir_path = Path(add_img_dir_path)
@@ -680,14 +687,15 @@ class ClassBalancedPatchDataset:
         self.items = []
         for i, (img_p, mask_p) in enumerate(tqdm(self.img_mask_paths, "loading images")):
             valid_zone_to_pass = None if i < 76 or not self.mode else self.valid_zones[i - 76]
-            self.items.append(_DsItem(img_p, mask_p, valid_zone=valid_zone_to_pass,
-                                    void_border_width=self.void_border_width,
-                                    patch_size=self.patch_size_src,
-                                    seed=(
-                                        self.seed + _short_hash("item") + i
-                                        if self.seed is not None
-                                        else None
-                                    )))
+            self.items.append(_DsItem(img_p, mask_p, self.void_rare_classes,
+                                      valid_zone=valid_zone_to_pass,
+                                      void_border_width=self.void_border_width,
+                                      patch_size=self.patch_size_src,
+                                      seed=(
+                                          self.seed + _short_hash("item") + i
+                                          if self.seed is not None
+                                          else None
+                                      )))
         # get all mask values
         mask_vals = set.union(*[set(i.n_pixels.keys()) for i in self.items])
         mask_vals.discard(255)  # remove void class

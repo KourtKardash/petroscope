@@ -83,6 +83,7 @@ def create_train_dataset(cfg: DictConfig, anisotropic_params: AnisotropicParams,
     return ClassBalancedPatchDataset(
         img_mask_paths=train_img_mask_p,
         patch_size=cfg.train.patch_size,
+        void_rare_classes=cfg.train.void_rare_classes.class_codes,
         augment_rotation=cfg.train.augm.rotation,
         augment_scale=cfg.train.augm.scale,
         augment_brightness=cfg.train.augm.brightness,
@@ -301,14 +302,14 @@ def run_training(cfg: DictConfig):
         logger.info(f"Auto-detected classes:\n{classes}")
 
         # Create the training dataset with detected classes
-        train_ds = create_train_dataset(cfg, class_set=classes)
+        train_ds = create_train_dataset(cfg, anisotropic_params, class_set=classes)
     else:
         classes = LumenStoneClasses.from_name(cfg.data.classes)
         logger.info(f"Using predefined class set: {cfg.data.classes}")
         logger.info(f"{classes}")
 
         # Create the training dataset
-        train_ds = create_train_dataset(cfg)
+        train_ds = create_train_dataset(cfg, anisotropic_params)
 
     # Create data samplers using the dataset
     train_iterator, val_iterator, ds_len = create_samplers(train_ds, cfg)
