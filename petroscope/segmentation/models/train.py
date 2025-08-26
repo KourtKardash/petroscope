@@ -69,6 +69,7 @@ def create_train_dataset(cfg: DictConfig, class_set=None):
     return ClassBalancedPatchDataset(
         img_mask_paths=train_img_mask_p,
         patch_size=cfg.train.patch_size,
+        void_rare_classes=cfg.train.void_rare_classes.class_codes,
         augment_rotation=cfg.train.augm.rotation,
         augment_scale=cfg.train.augm.scale,
         augment_brightness=cfg.train.augm.brightness,

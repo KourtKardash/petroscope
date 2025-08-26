@@ -70,12 +70,14 @@ class _DsItem:
         self,
         img_path: Path,
         mask_path: Path,
+        void_rare_classes: list[int] | None,
         void_border_width: int | None,
         patch_size: int,
         seed: int | None = None,
     ) -> None:
         self.img_path = img_path
         self.mask_path = mask_path
+        self.void_rare_classes = void_rare_classes
         self.void_border_width = void_border_width
         self.patch_size = patch_size
         # Create a RandomState instance once during initialization
@@ -95,6 +97,10 @@ class _DsItem:
     def _load(self) -> None:
         self.image = load_image(self.img_path)
         self.mask = load_mask(self.mask_path)
+
+        if self.void_rare_classes is not None:
+            for class_code in self.void_rare_classes:
+                self.mask[self.mask == class_code] = 255
 
         # Apply void borders if specified
         if self.void_border_width is not None:
@@ -442,6 +448,7 @@ class ClassBalancedPatchDataset:
         self,
         img_mask_paths: Iterable[tuple[Path, Path]],
         patch_size: int,
+        void_rare_classes: list[int] | None,
         cache_dir: Path | None = None,
         class_set: ClassSet | None = None,
         void_border_width: int | None = None,
@@ -558,6 +565,7 @@ class ClassBalancedPatchDataset:
 
         # setup params
         self.img_mask_paths = img_mask_paths
+        self.void_rare_classes = void_rare_classes
         self.class_set = class_set
         self.void_border_width = void_border_width
         self.downscale_maps = acceleration
@@ -617,6 +625,7 @@ class ClassBalancedPatchDataset:
             _DsItem(
                 img_p,
                 mask_p,
+                self.void_rare_classes,
                 self.void_border_width,
                 patch_size=self.patch_size_src,
                 seed=(
