@@ -109,7 +109,6 @@ def fast_iou_per_class(
 
     return iou_vals
 
-
 def fast_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> ExAcc:
     """
     Optimized accuracy calculation - up to 3x faster.
