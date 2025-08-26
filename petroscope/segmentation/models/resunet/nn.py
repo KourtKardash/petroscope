@@ -25,7 +25,7 @@ from torchvision.models import (
 
 
 class ConvResBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dilation=1):
         super(ConvResBlock, self).__init__()
         self.conv0 = nn.Conv2d(
             in_channels, out_channels, kernel_size=1, padding="same"
@@ -152,7 +152,7 @@ class ResUNetBase(nn.Module):
         Block = DilatedConvResBlock if dilated else ConvResBlock
 
         # For dilated model, use different dilation rates in different layers
-        dilation_rates = [1, 1, 2, 4] if dilated else [1, 1, 1, 1]
+        dilation_rates = [1, 1, 2, 4]
 
         self.down1 = Block(3, start_filters, dilation_rates[0])
         self.down2 = Block(start_filters, start_filters * 2, dilation_rates[1])
